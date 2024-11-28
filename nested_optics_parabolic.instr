@@ -1,0 +1,160 @@
+/*******************************************************************************
+* Instrument: <instrument name>
+*
+* %I
+* Written by: <your name (email)>
+* Date: <current date>
+* Origin: <your institution>
+* %INSTRUMENT_SITE: Templates
+*
+* <instrument short description>
+*
+* %D
+* <instrument description>
+*
+* Example: <parameters=values>
+*
+* %P
+* <parameter1>: [<unit>] <parameter1 description>
+* ...
+*
+* %L
+* <reference/HTML link>
+*
+* %E
+*******************************************************************************/
+DEFINE INSTRUMENT SKADI (
+x_dist=0.5,
+y_sample=0.015,
+L=0.2,
+colWidth=0.01,
+lambdamin=0.5,
+lambdamax=30)
+DECLARE
+%{
+  #ifndef M_PI
+  #define M_PI 3.14159265358979323846
+  #endif
+
+/**** Port-Gisans parameters ****/
+#define mirrNr 7 
+double bsample;
+double bn;
+double delta_a[mirrNr]={0};
+
+double f_pos[mirrNr]={0};
+double yp1[mirrNr]={0};
+double yp2[mirrNr]={0};
+
+/****                                         ****/
+
+
+/*     superMirror physical properties*/
+
+double Rm=0.99;
+double Qcm=0.021;
+double alpham=3.33;
+double mm=4;
+double Wm=0.003;
+
+%}
+
+INITIALIZE
+%{
+
+/**************************************************************/
+/* loop for calculating Port-GISANS mirror configuration: heigth and angle */
+
+ /**************************************************************/
+/**************************************************************/
+#include <math.h>
+#include <stdio.h>
+yp1[0] = y_sample;
+for(int i=0; i<mirrNr;i++)
+ { 
+  f_pos[i]= -x_dist/2+sqrt( pow(x_dist/2,2) + pow(yp1[i],2)/4 );
+  yp2[i]= sqrt( pow(yp1[i] ,2) - L*4*f_pos[i] );
+  yp1[i+1]= yp2[i];
+
+ }
+
+%}
+
+TRACE
+
+// insert components here (e.g. Insert -> Source -> ...)
+
+COMPONENT MCPL_source=MCPL_input(filename="ExtractionOutput.mcpl",verbose=1)
+AT(0,0,0) RELATIVE ABSOLUTE
+
+
+COMPONENT collSpec = L_monitor(xwidth=1, yheight=1,Lmin=lambdamin, Lmax=lambdamax,nL=100,filename="collSpec-HiRes.txt")
+AT (0,0,0.0001) RELATIVE PREVIOUS
+
+
+COMPONENT psd_pre_mirror = PSD_monitor(xmin=-0.02, xmax=0.02, ymin=-0.02, ymax=0.02,
+    filename="psd_premirror")
+AT (0, 0, 0.01) RELATIVE PREVIOUS
+ROTATED(0, 0, 0) RELATIVE PREVIOUS
+
+COMPONENT PortGisans = Arm()
+   AT (0,0, 0.02) RELATIVE PREVIOUS
+
+
+
+COMPONENT focus_Mirr_5 = Mirror_Parabolic(xwidth = yp1[4]-yp1[5], xshift=yp1[5], yheight=colWidth*2, focus=f_pos[4], R0=Rm, Qc=Qcm, alpha=alpham, m=mm, W=Wm)
+AT(0, colWidth/2 - y_sample, 0) RELATIVE PortGisans
+ROTATED(0,0,90)  RELATIVE PortGisans
+GROUP mirrorstack EXTEND
+%{
+     if (SCATTERED) printf("I scatter"); else printf("I do not scatter");
+%}
+
+
+
+COMPONENT focus_Mirr_4 = Mirror_Parabolic(xwidth = yp1[3]-yp1[4], xshift=yp1[4], yheight= colWidth*2, focus=f_pos[3], R0=Rm, Qc=Qcm, alpha=alpham, m=mm, W=Wm)
+AT(0, colWidth/2-y_sample, 0) RELATIVE PortGisans
+ROTATED(0,0,90) RELATIVE PortGisans 
+GROUP mirrorstack
+
+COMPONENT focus_Mirr_3 = Mirror_Parabolic(xwidth = yp1[2]-yp1[3], xshift=yp1[3], yheight=colWidth*2, focus=f_pos[2] , R0=Rm, Qc=Qcm, alpha=alpham, m=mm, W=Wm)
+AT(0,colWidth/2-y_sample,0) RELATIVE PortGisans
+ROTATED(0, 0, 90) RELATIVE PortGisans
+GROUP mirrorstack
+
+COMPONENT focus_Mirr_2=Mirror_Parabolic(xwidth = yp1[1]-yp1[2], xshift=yp1[2],  yheight=colWidth*2, focus=f_pos[1], R0=Rm, Qc=Qcm, alpha=alpham, m=mm, W=Wm)
+AT(0, colWidth/2-y_sample, 0) RELATIVE PortGisans
+ROTATED(0,0,90) RELATIVE PortGisans
+GROUP mirrorstack
+
+COMPONENT focus_Mirr=Mirror_Parabolic(xwidth=yp1[0]-yp1[1],  xshift=yp1[1], yheight=colWidth*2, focus=f_pos[0], R0=Rm,Qc=Qcm,alpha=alpham,m=mm,W=Wm)
+AT(0,colWidth/2-y_sample, 0) RELATIVE PortGisans
+ROTATED(0,0,90) RELATIVE PortGisans 
+GROUP mirrorstack
+
+
+COMPONENT psd_pre_sample= PSD_monitor(xmin=-0.02, xmax=0.02, ymin=-0.02, ymax=0.02,
+    filename="psd_pre_sample")
+AT (0, 0, x_dist-0.15) RELATIVE PortGisans
+
+
+COMPONENT collSpec_pre_sample = L_monitor(xwidth=0.1, yheight=0.1,Lmin=lambdamin, Lmax=lambdamax,nL=100,filename="collSpec_pre_sample.txt")
+AT (0, colWidth/2-y_sample, x_dist-0.15) RELATIVE PortGisans
+
+COMPONENT Div_sample=Divergence_monitor(nh=100, nv=100, xwidth=0.1, ymin=-0.15, ymax=0.15, maxdiv_h=2, maxdiv_v=3, filename="divergence_sample")
+AT(0,colWidth/2-y_sample ,x_dist-0.15) Relative PortGisans
+ROTATED(0,0,0) RELATIVE PortGisans
+
+
+COMPONENT psd_sample= PSD_monitor(xmin=-0.1, xmax=0.1,ymin=0, ymax=0.3,
+    filename="psd_sample")
+AT (0, colWidth/2-y_sample, x_dist-0.15) RELATIVE PortGisans
+ROTATED(90,0,0) RELATIVE PortGisans
+
+
+
+FINALLY
+%{
+%}
+
+END
