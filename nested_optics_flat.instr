@@ -1,0 +1,181 @@
+/*******************************************************************************
+* Instrument: <instrument name>
+*
+* %I
+* Written by: <your name (email)>
+* Date: <current date>
+* Origin: <your institution>
+* %INSTRUMENT_SITE: Templates
+*
+* <instrument short description>
+*
+* %D
+* <instrument description>
+*
+* Example: <parameters=values>
+*
+* %P
+* <parameter1>: [<unit>] <parameter1 description>
+* ...
+*
+* %L
+* <reference/HTML link>
+*
+* %E
+*******************************************************************************/
+DEFINE INSTRUMENT SKADI (
+colWidth = 0.0034,	/*collimation slit opening in m*/
+x_dist=0.5,
+theta_n=1,
+lm=0.1995,
+lambdamin=0.5,
+lambdamax=20)
+DECLARE
+%{
+  #ifndef M_PI
+  #define M_PI 3.14159265358979323846
+  #endif
+
+
+/**** Port-Gisans parameters ****/
+#define mirrNr 7
+double bsample;
+double bn;
+double delta_a[mirrNr]={0};
+double h_pos[mirrNr]={0};
+double theta_pos[mirrNr]={0};
+
+
+/****                                         ****/
+
+
+/*     superMirror physical properties*/
+double Rm=0.99;
+double Qcm=0.021;
+double alpham=3.33;
+double mm=4;
+double Wm=0.003;
+
+
+
+%}
+
+INITIALIZE
+%{
+
+
+
+
+
+/**************************************************************/
+/* loop for calculating Port-GISANS mirror configuration: heigth and angle */
+
+#include <math.h>
+#include <stdio.h>
+
+    bn=x_dist*tan(2*theta_n*M_PI/180);
+    h_pos[0]=bn;
+    theta_pos[0]=theta_n;
+    for(int i=1;i<mirrNr;i++)
+    {
+        
+        double b_new=bn-sin(theta_n*M_PI/180)*lm;
+        double theta_new=(180/M_PI)*atan(b_new/(x_dist))/2;
+        bn=b_new;
+        theta_n=theta_new;
+        h_pos[i]=bn;
+        theta_pos[i]=theta_n;
+        delta_a[i]= delta_a[i-1]+delta_a[0];
+        
+    }
+      
+        bsample=colWidth/2-sin(theta_pos[0]*M_PI/180)*(lm/2)-h_pos[0];
+        
+    
+ /**************************************************************/
+/**************************************************************/
+
+
+
+%}
+
+TRACE
+
+// insert components here (e.g. Insert -> Source -> ...)
+
+COMPONENT MCPL_source=MCPL_input(filename="input filename of MCPL describing the input beam",verbose=1)
+AT(0,0,0) RELATIVE ABSOLUTE
+
+COMPONENT bunkerHole = Arm()
+AT(0,0,0.01) RELATIVE PREVIOUS
+
+
+
+COMPONENT collSpec = L_monitor(xwidth=1, yheight=1,Lmin=lambdamin, Lmax=lambdamax,nL=100,filename="collSpec-HiRes.txt")
+AT (0,0,0.0001) RELATIVE PREVIOUS
+
+
+COMPONENT psd_pre_mirror = PSD_monitor(xmin=-0.02, xmax = 0.02 , ymin = -0.02, ymax=0.02,
+    filename="psd_premirror")
+AT (0, 0, 0.01) RELATIVE PREVIOUS
+ROTATED(0, 0, 0) RELATIVE PREVIOUS
+
+COMPONENT PortGisans = Arm()
+   AT (0,0, 0.001) RELATIVE PREVIOUS
+
+COMPONENT mirror5=Mirror(xwidth=lm, yheight=lm,R0=0.99,Qc=0.021,alpha=3.3,m=mm,W=0.003,center=1)
+AT (0, colWidth/2-(h_pos[0]-h_pos[4])-sin(theta_pos[4]*M_PI/180)*(lm/2), cos(theta_pos[0]*M_PI/180)*(lm/2) ) RELATIVE PortGisans
+ROTATED (90+theta_pos[4], 0 , 0) RELATIVE PortGisans
+GROUP mirrorstack EXTEND
+%{
+     if (SCATTERED) printf("I scatter"); else printf("I do not scatter");
+%}
+
+COMPONENT mirror4=Mirror(xwidth=lm, yheight=lm,R0=0.99,Qc=0.021,alpha=3.3,m=mm,W=0.003,center=1)
+AT (0, colWidth/2-(h_pos[0]-h_pos[3])-sin(theta_pos[3]*M_PI/180)*(lm/2), cos(theta_pos[0]*M_PI/180)*(lm/2) ) RELATIVE PortGisans
+ROTATED (90+theta_pos[3], 0, 0) RELATIVE PortGisans
+GROUP mirrorstack
+
+
+
+
+COMPONENT mirror3=Mirror(xwidth=lm, yheight=lm,R0=0.99,Qc=0.021,alpha=3.3,m=mm,W=0.003,center=1)
+AT (0, colWidth/2-(h_pos[0]-h_pos[2])-sin(theta_pos[2]*M_PI/180)*(lm/2), cos(theta_pos[0]*M_PI/180)*(lm/2) ) RELATIVE PortGisans
+ROTATED (90+theta_pos[2], 0 , 0) RELATIVE PortGisans
+GROUP mirrorstack
+
+COMPONENT mirror2=Mirror(xwidth=lm, yheight=lm,R0=0.99,Qc=0.021,alpha=3.3,m=mm,W=0.003,center=1)
+AT (0,colWidth/2-(h_pos[0]-h_pos[1])-sin(theta_pos[1]*M_PI/180)*(lm/2), cos(theta_pos[0]*M_PI/180)*(lm/2) ) RELATIVE PortGisans
+ROTATED (90+theta_pos[1], 0, 0) RELATIVE PortGisans
+GROUP mirrorstack
+
+
+COMPONENT focus_Mirr=Mirror(xwidth=lm, yheight=lm, R0=0.99,Qc=0.021,alpha=3.3,m=mm,W=0.003,center=1)
+AT(0, colWidth/2-sin(theta_pos[0]*M_PI/180)*(lm/2), cos(theta_pos[0]*M_PI/180)*(lm/2)) RELATIVE PortGisans
+ROTATED(90+theta_pos[0],0,0) RELATIVE PortGisans
+GROUP mirrorstack
+
+
+
+
+COMPONENT psd_pre_sample= PSD_monitor(xmin=-0.02, xmax = 0.02 , ymin = -0.02, ymax=0.02,
+    filename="psd_pre_sample")
+AT (0, 0, x_dist) RELATIVE PortGisans
+
+
+COMPONENT collSpec_pre_sample = L_monitor(xwidth=0.1, yheight=0.1,Lmin=lambdamin, Lmax=lambdamax,nL=100,filename="collSpec_pre_sample.txt")
+AT (0, 0, x_dist) RELATIVE PortGisans
+
+COMPONENT Div_sample=Divergence_monitor(nh=100, nv=100, xwidth=0.1, yheight=0.3, maxdiv_h=2, maxdiv_v=3, filename="divergence_sample")
+AT(0,bsample , x_dist) Relative PortGisans
+ROTATED(0,0,0) RELATIVE PortGisans
+
+COMPONENT psd_sample= PSD_monitor(xmin= -0.1, xmax=0.1 , yheight=0.3,
+    filename="psd_sample")
+AT (0, bsample, x_dist+0.1) RELATIVE PortGisans
+ROTATED(90,0,0) RELATIVE PortGisans
+FINALLY
+%{
+%}
+
+END
